@@ -8,6 +8,7 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
   const CONTROL_ROW_ID = 'oee-theatre-controls';
   const OVERLAY_ID = 'oee-theatre-overlay';
   const OVERLAY_CLASS = 'oee-overlay';
+  const OVERLAY_LIGHT_THEME_CLASS = 'oee-overlay--light-theme';
   const VISIBLE_CLASS = 'oee-overlay--visible';
   const BTN_CLASS = 'oee-btn';
   const CONTROL_ROW_CLASS = 'oee-controls';
@@ -23,6 +24,14 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
   const LOOP_POPOVER_ID = 'oee-loop-popover';
   const LOOP_POPOVER_CLASS = 'oee-loop-popover';
   const LOOP_POPOVER_OPEN_CLASS = 'oee-loop-popover--open';
+  const POINTER_EVENT_NAMES = ['pointerdown', 'mousedown', 'mouseup'];
+  const CLICK_EVENT_NAMES = [...POINTER_EVENT_NAMES, 'click'];
+  const MEDIA_EVENT_HANDLERS = [
+    ['timeupdate', handleLoopTimeUpdate],
+    ['loadedmetadata', handleLoopMetadata],
+    ['durationchange', handleLoopMetadata],
+    ['ended', handleLoopEnded],
+  ];
   const MAX_INIT_ATTEMPTS = 80;
   const INIT_RETRY_MS = 400;
   const URL_CHECK_MS = 800;
@@ -97,7 +106,31 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
     el.id = OVERLAY_ID;
     el.className = OVERLAY_CLASS;
     el.addEventListener('click', deactivate);
+    syncOverlayTheme(el);
     return el;
+  }
+
+  function isLightThemeToggleButton(button) {
+    const label = button?.getAttribute('aria-label') || button?.getAttribute('title') || '';
+    return label.trim().toLowerCase() === 'dark';
+  }
+
+  function isOdyseeLightTheme() {
+    const rootTheme = document.documentElement.getAttribute('theme');
+    if (rootTheme === 'light') {
+      return true;
+    }
+
+    if (rootTheme === 'dark') {
+      return false;
+    }
+
+    const themeButton = document.querySelector('button[aria-label="Dark"], button[title="Dark"], button[aria-label="Light"], button[title="Light"]');
+    return isLightThemeToggleButton(themeButton);
+  }
+
+  function syncOverlayTheme(overlayElement = overlay) {
+    overlayElement?.classList.toggle(OVERLAY_LIGHT_THEME_CLASS, isOdyseeLightTheme());
   }
 
   function createIconNode(iconMarkup) {
@@ -134,19 +167,27 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
 
     btn.appendChild(labelNode);
 
-    const stopEvent = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    };
-
-    btn.addEventListener('pointerdown', stopEvent);
-    btn.addEventListener('mousedown', stopEvent);
-    btn.addEventListener('mouseup', stopEvent);
+    addStoppedEventListeners(btn, POINTER_EVENT_NAMES, stopAndPreventEvent);
     btn.addEventListener('click', (event) => {
-      stopEvent(event);
+      stopAndPreventEvent(event);
       onClick(event);
     });
     return btn;
+  }
+
+  function stopEvent(event) {
+    event.stopPropagation();
+  }
+
+  function stopAndPreventEvent(event) {
+    event.preventDefault();
+    stopEvent(event);
+  }
+
+  function addStoppedEventListeners(element, eventNames, handler) {
+    eventNames.forEach((eventName) => {
+      element.addEventListener(eventName, handler);
+    });
   }
 
   function getTheatreScope() {
@@ -228,14 +269,7 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
 
     popover.append(rangeRow, toggleRow);
 
-    const stopPopoverEvent = (event) => {
-      event.stopPropagation();
-    };
-
-    popover.addEventListener('pointerdown', stopPopoverEvent);
-    popover.addEventListener('mousedown', stopPopoverEvent);
-    popover.addEventListener('mouseup', stopPopoverEvent);
-    popover.addEventListener('click', stopPopoverEvent);
+    addStoppedEventListeners(popover, CLICK_EVENT_NAMES, stopEvent);
 
     popover.querySelector('[name="start"]')?.addEventListener('change', updateLoopRangeFromInputs);
     popover.querySelector('[name="end"]')?.addEventListener('change', updateLoopRangeFromInputs);
@@ -323,6 +357,20 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
 
   function getVideoDuration(video) {
     return Number.isFinite(video?.duration) ? video.duration : 0;
+  }
+
+  function isPastLoopRange(video, range) {
+    return video.currentTime < range.start || (Number.isFinite(range.end) && video.currentTime > range.end);
+  }
+
+  function seekToLoopStart(video, range) {
+    video.currentTime = range.start;
+  }
+
+  function updateMediaEventBindings(video, methodName) {
+    MEDIA_EVENT_HANDLERS.forEach(([eventName, handler]) => {
+      video[methodName](eventName, handler);
+    });
   }
 
   function ensureLoopRange(video) {
@@ -429,8 +477,8 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
 
     if (mediaElement && loopEnabled) {
       const range = ensureLoopRange(mediaElement);
-      if (mediaElement.currentTime < range.start || (Number.isFinite(range.end) && mediaElement.currentTime > range.end)) {
-        mediaElement.currentTime = range.start;
+      if (isPastLoopRange(mediaElement, range)) {
+        seekToLoopStart(mediaElement, range);
       }
     }
 
@@ -444,11 +492,8 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
       const range = ensureLoopRange(mediaElement);
       mediaElement.loop = false;
 
-      if (
-        loopEnabled &&
-        (mediaElement.currentTime < range.start || (Number.isFinite(range.end) && mediaElement.currentTime > range.end))
-      ) {
-        mediaElement.currentTime = range.start;
+      if (loopEnabled && isPastLoopRange(mediaElement, range)) {
+        seekToLoopStart(mediaElement, range);
       }
     }
 
@@ -467,12 +512,12 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
     }
 
     if (mediaElement.currentTime < range.start) {
-      mediaElement.currentTime = range.start;
+      seekToLoopStart(mediaElement, range);
       return;
     }
 
     if (mediaElement.currentTime >= Math.max(range.start, range.end - 0.05)) {
-      mediaElement.currentTime = range.start;
+      seekToLoopStart(mediaElement, range);
     }
   }
 
@@ -491,7 +536,7 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
     }
 
     const range = ensureLoopRange(mediaElement);
-    mediaElement.currentTime = range.start;
+    seekToLoopStart(mediaElement, range);
     mediaElement.play().catch(() => {});
   }
 
@@ -502,19 +547,13 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
     }
 
     if (mediaElement) {
-      mediaElement.removeEventListener('timeupdate', handleLoopTimeUpdate);
-      mediaElement.removeEventListener('loadedmetadata', handleLoopMetadata);
-      mediaElement.removeEventListener('durationchange', handleLoopMetadata);
-      mediaElement.removeEventListener('ended', handleLoopEnded);
+      updateMediaEventBindings(mediaElement, 'removeEventListener');
       mediaElement.loop = false;
     }
 
     mediaElement = nextVideo;
     mediaElement.loop = false;
-    mediaElement.addEventListener('timeupdate', handleLoopTimeUpdate);
-    mediaElement.addEventListener('loadedmetadata', handleLoopMetadata);
-    mediaElement.addEventListener('durationchange', handleLoopMetadata);
-    mediaElement.addEventListener('ended', handleLoopEnded);
+    updateMediaEventBindings(mediaElement, 'addEventListener');
     handleLoopMetadata();
   }
 
@@ -523,10 +562,7 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
       return;
     }
 
-    mediaElement.removeEventListener('timeupdate', handleLoopTimeUpdate);
-    mediaElement.removeEventListener('loadedmetadata', handleLoopMetadata);
-    mediaElement.removeEventListener('durationchange', handleLoopMetadata);
-    mediaElement.removeEventListener('ended', handleLoopEnded);
+    updateMediaEventBindings(mediaElement, 'removeEventListener');
     mediaElement.loop = false;
     mediaElement = null;
   }
@@ -582,6 +618,7 @@ import { loopIconMarkup, theatreIconMarkup } from './icons.js';
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }
 
+    syncOverlayTheme();
     syncLoopUiState();
   }
 

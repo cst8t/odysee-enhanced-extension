@@ -8,6 +8,10 @@
   pointer-events: auto;
 }
 
+.oee-overlay--light-theme {
+  background: rgba(0, 0, 0, 0.96);
+}
+
 .oee-overlay--visible {
   opacity: 1;
 }
