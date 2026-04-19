@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Odysee Enhanced",
+  "version": "1.0.0",
+  "description": "Theatre mode and other enhancements for Odysee video pages",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://odysee.com/*",
+        "*://www.odysee.com/*"
+      ],
+      "js": [
+        "src/content-script.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      },
+      "id": "odysee-enhanced@odysee-enhanced-extension",
+      "strict_min_version": "140.0"
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
+    }
+  }
+}

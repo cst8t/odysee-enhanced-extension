@@ -1,0 +1,21 @@
+{
+  "name": "odysee-enhanced-extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Theatre mode and other enhancements for Odysee video pages",
+  "author": "cst8t",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:firefox": "node build.mjs --review",
+    "build:amo": "npm run build:firefox",
+    "check:firefox": "npm run build:firefox && web-ext lint --source-dir dist",
+    "clean": "rm -rf dist web-ext-artifacts",
+    "package:firefox": "npm run build:firefox && web-ext build --source-dir dist --artifacts-dir web-ext-artifacts --overwrite-dest",
+    "package:source": "mkdir -p web-ext-artifacts && rm -f web-ext-artifacts/odysee-enhanced-extension-source.zip && 7z a -tzip web-ext-artifacts/odysee-enhanced-extension-source.zip ./src ./icons ./manifest.json ./package.json ./package-lock.json ./build.mjs ./README.mozilla.md ./.gitignore"
+  },
+  "devDependencies": {
+    "@phosphor-icons/core": "^2.1.1",
+    "esbuild": "^0.28.0",
+    "web-ext": "^10.1.0"
+  }
+}
