@@ -4,6 +4,7 @@
   "private": true,
   "description": "Theatre mode and other enhancements for Odysee video pages",
   "author": "cst8t",
+  "license": "MIT",
   "scripts": {
     "build": "node build.mjs",
     "build:firefox": "node build.mjs --review",
